@@ -1,0 +1,91 @@
+{{- $mockName := printf "Mock%s" .Name }}
+{{- if hasKey .Vars "name" }}{{ $mockName = .Vars.name }}{{ end -}}
+// {{$mockName}} is a mock of {{.Name}} interface.
+type {{$mockName}}{{ typeParameters $.Interface }} struct {
+	ctrl     *{{ import "go.uber.org/mock/gomock" }}.Controller
+	recorder *{{$mockName}}MockRecorder{{ typeParameterNames $.Interface }}
+}
+
+// {{$mockName}}MockRecorder is the mock recorder for {{$mockName}}.
+type {{$mockName}}MockRecorder{{ typeParameters $.Interface }} struct {
+	mock *{{$mockName}}{{ typeParameterNames $.Interface }}
+}
+
+// New{{$mockName}} creates a new mock instance.
+func New{{$mockName}}{{ typeParameters $.Interface }}(ctrl *{{ import "go.uber.org/mock/gomock" }}.Controller) *{{$mockName}}{{ typeParameterNames $.Interface }} {
+	mock := &{{ $mockName }}{{ typeParameterNames $.Interface }}{ctrl: ctrl}
+	mock.recorder = &{{$mockName}}MockRecorder{{ typeParameterNames $.Interface }}{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *{{$mockName}}{{ typeParameterNames $.Interface }}) EXPECT() *{{$mockName}}MockRecorder{{ typeParameterNames $.Interface }} {
+	return m.recorder
+}
+
+// ISGOMOCK indicates that this struct is a gomock mock.
+func (m *{{$mockName}}{{ typeParameterNames $.Interface }}) ISGOMOCK() struct{} {
+	return struct{}{}
+}
+{{ range $method := $.Interface.AllMethods }}
+// {{$method.Name}} mocks base method.
+{{- $receiver := uniqueIdentifier "m" $method }}
+func ({{$receiver}} *{{$mockName}}{{ typeParameterNames $.Interface }}) {{$method.Name}}({{parametersIn "arg" $method}}){{ parametersOutTypes $method }} {
+	{{$receiver}}.ctrl.T.Helper()
+	{{- $params := list "m" (printf "\"%s\"" $method.Name) }}
+	{{- if $method.Variadic }}
+	varargs := []any{ {{- join ", " (parameterNames "arg" $method.In) -}} }
+	for _, a := range {{ index (parametersInNames "arg" $method) (len $method.In) }} {
+		varargs = append(varargs, a)
+	}
+	{{- $params = push $params "varargs..." }}
+	{{- else }}
+	{{- $params = concat $params (parametersInNames "arg" $method) }}
+	{{- end }}
+	{{ if ne 0 (len $method.Out) }}ret := {{ end }}{{$receiver}}.ctrl.Call({{ join ", " $params }})
+    {{- $returnVariables := list }}
+	{{- range $paramIndex, $_ := parameterNames "ret" $method.Out }}
+    {{- $returnVariables = push $returnVariables (printf "ret%d" $paramIndex) }}
+	ret{{$paramIndex}}, _ := ret[{{$paramIndex}}].({{ formatType (index $method.Out $paramIndex).Type }})
+	{{- end }}
+	{{- if ne 0 (len $method.Out) }}
+	return {{ join ", " $returnVariables }}{{ end }}
+}
+
+// {{$method.Name}} indicates an expected call of {{$method.Name}}.
+func (mr *{{$mockName}}MockRecorder{{ typeParameterNames $.Interface }}) {{$method.Name}}({{parametersInAnyType "arg" $method}}) *{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }} {
+	mr.mock.ctrl.T.Helper()
+	{{- $params := list "mr.mock" (printf "\"%s\"" $method.Name) (printf "%s.TypeOf((*%s%s)(nil).%s)" (import "reflect") $mockName (typeParameterNames $.Interface) $method.Name) }}
+	{{- if $method.Variadic }}
+	varargs := append([]any{ {{- join ", " (parameterNames "arg" $method.In) -}} }, {{ parameterNameVariadic "arg" $method }}...)
+	{{- $params = push $params "varargs..." }}
+	{{- else }}
+	{{- $params = concat $params (parametersInNames "arg" $method) }}
+	{{- end }}
+	call := mr.mock.ctrl.RecordCallWithMethodType({{ join ", " $params }})
+	return &{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }}{Call: call}
+}
+
+// {{$.Name}}{{$method.Name}}Call wrap *gomock.Call
+type {{$.Name}}{{$method.Name}}Call{{ typeParameters $.Interface }} struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }}) Return({{parametersOutPlain "arg" $method}}) *{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }} {
+	c.Call = c.Call.Return({{join ", " (parameterNamesPlain "arg" $method.Out)}})
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }}) Do(f func({{parametersInTypes $method}}){{ parametersOutTypes $method }}) *{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }} {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }}) DoAndReturn(f func({{parametersInTypes $method}}){{ parametersOutTypes $method }}) *{{$.Name}}{{$method.Name}}Call{{ typeParameterNames $.Interface }} {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+{{ end -}}

@@ -1,0 +1,2 @@
+var _ = {{ import "context" }}.Context(nil)
+var _ = {{ import "golang.org/x/net/context" }}.Context(nil)

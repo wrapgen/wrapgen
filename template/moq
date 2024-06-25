@@ -1,0 +1,49 @@
+{{- $mockName := printf "%sMock" $.Name }}
+// {{$mockName}} is a mock implementation of {{.Name}}.
+type {{$mockName}} struct {
+{{- range $method := $.Interface.AllMethods }}
+	// {{$method.Name}}Func mocks the {{$method.Name}} method.
+	{{$method.Name}}Func func({{parametersIn "arg" $method}}){{ parametersOutTypes $method }}
+{{end}}
+	// calls tracks calls to the methods.
+	calls struct {
+{{- range $method := $.Interface.AllMethods }}
+		// {{$method.Name}} holds details about calls to the {{$method.Name}} method.
+		{{$method.Name}} []struct {
+			{{- range  $method.In }}
+			// {{.Name | title }} is the {{.Name}} argument value.
+			{{.Name | title }} {{formatType .Type}}
+			{{- end}}
+		}
+{{- end}}
+	}
+	{{- range $method := $.Interface.AllMethods }}
+	lock{{$method.Name}} {{ import "sync" }}.RWMutex
+	{{- end}}
+}
+
+{{range $method := $.Interface.AllMethods}}
+// {{$method.Name}} calls {{$method.Name}}Func.
+func (mock *{{$mockName}}) {{$method.Name}}({{parametersIn "arg" $method}}){{ parametersOutTypes $method }} {
+	if mock.{{$method.Name}}Func == nil {
+		panic("{{$mockName}}.{{$method.Name}}Func: method is nil but {{$.Name}}.{{$method.Name}} was just called")
+	}
+	callInfo := struct {
+		{{- range $method.In}}
+		{{.Name | title}} {{formatType .Type}}
+		{{- end}}
+	}{
+		{{- range $method.In}}
+		{{.Name | title}}: {{.Name}},
+		{{- end}}
+	}
+	mock.lock{{$method.Name}}.Lock()
+	mock.calls.{{$method.Name}} = append(mock.calls.{{$method.Name}}, callInfo)
+	mock.lock{{$method.Name}}.Unlock()
+{{- if $method.Out}}
+	return mock.{{$method.Name}}Func({{- join ", " (parameterNames "arg" $method.In) -}})
+{{- else}}
+	mock.{{$method.Name}}Func({{- join ", " (parameterNames "arg" $method.In) -}})
+{{- end}}
+}
+{{end}}

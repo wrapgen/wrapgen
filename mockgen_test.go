@@ -1,469 +1,117 @@
+// Copyright 2024 Wrapgen authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
-	"reflect"
-	"regexp"
 	"strings"
+	"sync"
 	"testing"
-
-	"go.uber.org/mock/mockgen/model"
 )
 
-func TestMakeArgString(t *testing.T) {
-	testCases := []struct {
-		argNames  []string
-		argTypes  []string
-		argString string
-	}{
-		{
-			argNames:  nil,
-			argTypes:  nil,
-			argString: "",
-		},
-		{
-			argNames:  []string{"arg0"},
-			argTypes:  []string{"int"},
-			argString: "arg0 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1"},
-			argTypes:  []string{"int", "bool"},
-			argString: "arg0 int, arg1 bool",
-		},
-		{
-			argNames:  []string{"arg0", "arg1"},
-			argTypes:  []string{"int", "int"},
-			argString: "arg0, arg1 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2"},
-			argTypes:  []string{"bool", "int", "int"},
-			argString: "arg0 bool, arg1, arg2 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2"},
-			argTypes:  []string{"int", "bool", "int"},
-			argString: "arg0 int, arg1 bool, arg2 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2"},
-			argTypes:  []string{"int", "int", "bool"},
-			argString: "arg0, arg1 int, arg2 bool",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2"},
-			argTypes:  []string{"int", "int", "int"},
-			argString: "arg0, arg1, arg2 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3"},
-			argTypes:  []string{"bool", "int", "int", "int"},
-			argString: "arg0 bool, arg1, arg2, arg3 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3"},
-			argTypes:  []string{"int", "bool", "int", "int"},
-			argString: "arg0 int, arg1 bool, arg2, arg3 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3"},
-			argTypes:  []string{"int", "int", "bool", "int"},
-			argString: "arg0, arg1 int, arg2 bool, arg3 int",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3"},
-			argTypes:  []string{"int", "int", "int", "bool"},
-			argString: "arg0, arg1, arg2 int, arg3 bool",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3", "arg4"},
-			argTypes:  []string{"bool", "int", "int", "int", "bool"},
-			argString: "arg0 bool, arg1, arg2, arg3 int, arg4 bool",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3", "arg4"},
-			argTypes:  []string{"int", "bool", "int", "int", "bool"},
-			argString: "arg0 int, arg1 bool, arg2, arg3 int, arg4 bool",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3", "arg4"},
-			argTypes:  []string{"int", "int", "bool", "int", "bool"},
-			argString: "arg0, arg1 int, arg2 bool, arg3 int, arg4 bool",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3", "arg4"},
-			argTypes:  []string{"int", "int", "int", "bool", "bool"},
-			argString: "arg0, arg1, arg2 int, arg3, arg4 bool",
-		},
-		{
-			argNames:  []string{"arg0", "arg1", "arg2", "arg3", "arg4"},
-			argTypes:  []string{"int", "int", "bool", "bool", "int"},
-			argString: "arg0, arg1 int, arg2, arg3 bool, arg4 int",
-		},
-	}
+var flagOverwrite = flag.Bool("overwrite", false, "Overwrite expected files")
 
-	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			s := makeArgString(tc.argNames, tc.argTypes)
-			if s != tc.argString {
-				t.Errorf("result == %q, want %q", s, tc.argString)
-			}
-		})
-	}
-}
+func mapWriter() (func(path string) (stringWriteCloser, error), map[string][]byte) {
+	var (
+		l sync.Mutex
+		m = map[string][]byte{}
+	)
 
-func TestNewIdentifierAllocator(t *testing.T) {
-	a := newIdentifierAllocator([]string{"taken1", "taken2"})
-	if len(a) != 2 {
-		t.Fatalf("expected 2 items, got %v", len(a))
-	}
+	return func(path string) (stringWriteCloser, error) {
+		l.Lock()
+		defer l.Unlock()
 
-	_, ok := a["taken1"]
-	if !ok {
-		t.Errorf("allocator doesn't contain 'taken1': %#v", a)
-	}
-
-	_, ok = a["taken2"]
-	if !ok {
-		t.Errorf("allocator doesn't contain 'taken2': %#v", a)
-	}
-}
-
-func allocatorContainsIdentifiers(a identifierAllocator, ids []string) bool {
-	if len(a) != len(ids) {
-		return false
-	}
-
-	for _, id := range ids {
-		_, ok := a[id]
-		if !ok {
-			return false
+		_, exists := m[path]
+		if exists {
+			return nil, fmt.Errorf("file %s already exists", path)
 		}
-	}
-
-	return true
+		return &mapWriterWriter{
+			l:    &l,
+			m:    m,
+			path: path,
+		}, nil
+	}, m
 }
 
-func TestIdentifierAllocator_allocateIdentifier(t *testing.T) {
-	a := newIdentifierAllocator([]string{"taken"})
-
-	t2 := a.allocateIdentifier("taken_2")
-	if t2 != "taken_2" {
-		t.Fatalf("expected 'taken_2', got %q", t2)
-	}
-	expected := []string{"taken", "taken_2"}
-	if !allocatorContainsIdentifiers(a, expected) {
-		t.Fatalf("allocator doesn't contain the expected items - allocator: %#v, expected items: %#v", a, expected)
-	}
-
-	t3 := a.allocateIdentifier("taken")
-	if t3 != "taken_3" {
-		t.Fatalf("expected 'taken_3', got %q", t3)
-	}
-	expected = []string{"taken", "taken_2", "taken_3"}
-	if !allocatorContainsIdentifiers(a, expected) {
-		t.Fatalf("allocator doesn't contain the expected items - allocator: %#v, expected items: %#v", a, expected)
-	}
-
-	t4 := a.allocateIdentifier("taken")
-	if t4 != "taken_4" {
-		t.Fatalf("expected 'taken_4', got %q", t4)
-	}
-	expected = []string{"taken", "taken_2", "taken_3", "taken_4"}
-	if !allocatorContainsIdentifiers(a, expected) {
-		t.Fatalf("allocator doesn't contain the expected items - allocator: %#v, expected items: %#v", a, expected)
-	}
-
-	id := a.allocateIdentifier("id")
-	if id != "id" {
-		t.Fatalf("expected 'id', got %q", id)
-	}
-	expected = []string{"taken", "taken_2", "taken_3", "taken_4", "id"}
-	if !allocatorContainsIdentifiers(a, expected) {
-		t.Fatalf("allocator doesn't contain the expected items - allocator: %#v, expected items: %#v", a, expected)
-	}
+type mapWriterWriter struct {
+	l    *sync.Mutex
+	m    map[string][]byte
+	path string
 }
 
-func TestGenerateMockInterface_Helper(t *testing.T) {
-	for _, test := range []struct {
-		Name       string
-		Identifier string
-		HelperLine string
-		Methods    []*model.Method
-	}{
-		{Name: "mock", Identifier: "MockSomename", HelperLine: "m.ctrl.T.Helper()"},
-		{Name: "recorder", Identifier: "MockSomenameMockRecorder", HelperLine: "mr.mock.ctrl.T.Helper()"},
-		{
-			Name:       "mock identifier conflict",
-			Identifier: "MockSomename",
-			HelperLine: "m_2.ctrl.T.Helper()",
-			Methods: []*model.Method{
-				{
-					Name: "MethodA",
-					In: []*model.Parameter{
-						{
-							Name: "m",
-							Type: &model.NamedType{Type: "int"},
-						},
-					},
-				},
-			},
-		},
-		{
-			Name:       "recorder identifier conflict",
-			Identifier: "MockSomenameMockRecorder",
-			HelperLine: "mr_2.mock.ctrl.T.Helper()",
-			Methods: []*model.Method{
-				{
-					Name: "MethodA",
-					In: []*model.Parameter{
-						{
-							Name: "mr",
-							Type: &model.NamedType{Type: "int"},
-						},
-					},
-				},
-			},
-		},
-	} {
-		t.Run(test.Name, func(t *testing.T) {
-			g := generator{}
+func (m mapWriterWriter) Write(p []byte) (n int, err error) {
+	m.l.Lock()
+	defer m.l.Unlock()
+	m.m[m.path] = append(m.m[m.path], p...)
+	return len(p), nil
+}
 
-			if len(test.Methods) == 0 {
-				test.Methods = []*model.Method{
-					{Name: "MethodA"},
-					{Name: "MethodB"},
+func (m mapWriterWriter) Close() error {
+	return nil
+}
+
+func (m mapWriterWriter) WriteString(s string) (n int, err error) {
+	return m.Write([]byte(s))
+}
+
+func TestExamples(t *testing.T) {
+	w, m := mapWriter()
+	processDirectory("testdata/examples/", w)
+
+	for writtenPath, writtenFileBytes := range m {
+		t.Run(strings.TrimPrefix(writtenPath, "testdata/examples/"), func(t *testing.T) {
+			expectedBytes, err := os.ReadFile(writtenPath)
+			if err != nil {
+				t.Fatalf("written to unexpected file %v: %s", writtenPath, err)
+			}
+
+			if diff := diff(writtenPath, string(expectedBytes), string(writtenFileBytes)); diff != "" {
+				if *flagOverwrite {
+					_ = os.WriteFile(writtenPath, writtenFileBytes, 0666)
+					t.Fatalf("Overwriting %v", writtenPath)
 				}
+				t.Fatalf("File content differ %s:\n%s", writtenPath, diff)
 			}
-
-			intf := &model.Interface{Name: "Somename"}
-			for _, m := range test.Methods {
-				intf.AddMethod(m)
-			}
-
-			if err := g.GenerateMockInterface(intf, "somepackage"); err != nil {
-				t.Fatal(err)
-			}
-
-			lines := strings.Split(g.buf.String(), "\n")
-
-			// T.Helper() should be the first line
-			for _, method := range test.Methods {
-				if strings.TrimSpace(lines[findMethod(t, test.Identifier, method.Name, lines)+1]) != test.HelperLine {
-					t.Fatalf("method %s.%s did not declare itself a Helper method", test.Identifier, method.Name)
-				}
-			}
+			_ = writtenFileBytes
 		})
 	}
 }
 
-func findMethod(t *testing.T, identifier, methodName string, lines []string) int {
-	t.Helper()
-	r := regexp.MustCompile(fmt.Sprintf(`func\s+\(.+%s\)\s*%s`, identifier, methodName))
-	for i, line := range lines {
-		if r.MatchString(line) {
-			return i
+// diff is a totally simple text-diff function that returns empty-string if text1==text2.
+func diff(name, expected, actual string) string {
+	expectedLines, actualLines := strings.Split(expected, "\n"), strings.Split(actual, "\n")
+	for i := 0; i < len(expectedLines) && i < len(actualLines); i++ {
+		if expectedLines[i] == actualLines[i] {
+			continue
 		}
+		return fmt.Sprintf(`Error: Not equal: %s:%d
+       	            	expected: %q
+       	            	actual  : %q`, name, i+1, expectedLines[i], actualLines[i])
+	}
+	if len(expectedLines) > len(actualLines) {
+		return fmt.Sprintf(`Error: Not equal: %s:%d
+       	            	expected: %q
+       	            	actual  : EOF`, name, len(expectedLines), expectedLines[len(expectedLines)-1])
+	}
+	if len(expectedLines) < len(actualLines) {
+		return fmt.Sprintf(`Error: Not equal: %s:%d
+       	            	expected: EOF
+       	            	actual  : %s`, name, len(expectedLines), actualLines[len(actualLines)-1])
 	}
 
-	t.Fatalf("unable to find 'func (m %s) %s'", identifier, methodName)
-	panic("unreachable")
-}
-
-func TestGetArgNames(t *testing.T) {
-	for _, testCase := range []struct {
-		name     string
-		method   *model.Method
-		expected []string
-	}{
-		{
-			name: "NamedArg",
-			method: &model.Method{
-				In: []*model.Parameter{
-					{
-						Name: "firstArg",
-						Type: &model.NamedType{Type: "int"},
-					},
-					{
-						Name: "secondArg",
-						Type: &model.NamedType{Type: "string"},
-					},
-				},
-			},
-			expected: []string{"firstArg", "secondArg"},
-		},
-		{
-			name: "NotNamedArg",
-			method: &model.Method{
-				In: []*model.Parameter{
-					{
-						Name: "",
-						Type: &model.NamedType{Type: "int"},
-					},
-					{
-						Name: "",
-						Type: &model.NamedType{Type: "string"},
-					},
-				},
-			},
-			expected: []string{"arg0", "arg1"},
-		},
-		{
-			name: "MixedNameArg",
-			method: &model.Method{
-				In: []*model.Parameter{
-					{
-						Name: "firstArg",
-						Type: &model.NamedType{Type: "int"},
-					},
-					{
-						Name: "_",
-						Type: &model.NamedType{Type: "string"},
-					},
-				},
-			},
-			expected: []string{"firstArg", "arg1"},
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			g := generator{}
-
-			result := g.getArgNames(testCase.method, true)
-			if !reflect.DeepEqual(result, testCase.expected) {
-				t.Fatalf("expected %s, got %s", result, testCase.expected)
-			}
-		})
-	}
-}
-
-func Test_createPackageMap(t *testing.T) {
-	tests := []struct {
-		name            string
-		importPath      string
-		wantPackageName string
-		wantOK          bool
-	}{
-		{"golang package", "context", "context", true},
-		{"third party", "golang.org/x/tools/present", "present", true},
-	}
-	var importPaths []string
-	for _, t := range tests {
-		importPaths = append(importPaths, t.importPath)
-	}
-	packages := createPackageMap(importPaths)
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotPackageName, gotOk := packages[tt.importPath]
-			if gotPackageName != tt.wantPackageName {
-				t.Errorf("createPackageMap() gotPackageName = %v, wantPackageName = %v", gotPackageName, tt.wantPackageName)
-			}
-			if gotOk != tt.wantOK {
-				t.Errorf("createPackageMap() gotOk = %v, wantOK = %v", gotOk, tt.wantOK)
-			}
-		})
-	}
-}
-
-func TestParsePackageImport_FallbackGoPath(t *testing.T) {
-	goPath := t.TempDir()
-	expectedPkgPath := path.Join("example.com", "foo")
-	srcDir := filepath.Join(goPath, "src", expectedPkgPath)
-	err := os.MkdirAll(srcDir, 0o755)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("GOPATH", goPath)
-	t.Setenv("GO111MODULE", "on")
-	pkgPath, err := parsePackageImport(srcDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pkgPath != expectedPkgPath {
-		t.Errorf("expect %s, got %s", expectedPkgPath, pkgPath)
-	}
-}
-
-func TestParsePackageImport_FallbackMultiGoPath(t *testing.T) {
-	// first gopath
-	goPath := t.TempDir()
-	goPathList := []string{goPath}
-	expectedPkgPath := path.Join("example.com", "foo")
-	srcDir := filepath.Join(goPath, "src", expectedPkgPath)
-	err := os.MkdirAll(srcDir, 0o755)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// second gopath
-	goPath = t.TempDir()
-	goPathList = append(goPathList, goPath)
-
-	goPaths := strings.Join(goPathList, string(os.PathListSeparator))
-	t.Setenv("GOPATH", goPaths)
-	t.Setenv("GO111MODULE", "on")
-	pkgPath, err := parsePackageImport(srcDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pkgPath != expectedPkgPath {
-		t.Errorf("expect %s, got %s", expectedPkgPath, pkgPath)
-	}
-}
-
-func TestParseExcludeInterfaces(t *testing.T) {
-	testCases := []struct {
-		name     string
-		arg      string
-		expected map[string]struct{}
-	}{
-		{
-			name:     "empty string",
-			arg:      "",
-			expected: nil,
-		},
-		{
-			name:     "string without a comma",
-			arg:      "arg1",
-			expected: map[string]struct{}{"arg1": {}},
-		},
-		{
-			name:     "two names",
-			arg:      "arg1,arg2",
-			expected: map[string]struct{}{"arg1": {}, "arg2": {}},
-		},
-		{
-			name:     "two names with a comma at the end",
-			arg:      "arg1,arg2,",
-			expected: map[string]struct{}{"arg1": {}, "arg2": {}},
-		},
-		{
-			name:     "two names with a comma at the beginning",
-			arg:      ",arg1,arg2",
-			expected: map[string]struct{}{"arg1": {}, "arg2": {}},
-		},
-		{
-			name:     "commas only",
-			arg:      ",,,,",
-			expected: nil,
-		},
-		{
-			name:     "duplicates",
-			arg:      "arg1,arg2,arg1",
-			expected: map[string]struct{}{"arg1": {}, "arg2": {}},
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			actual := parseExcludeInterfaces(tt.arg)
-
-			if !reflect.DeepEqual(actual, tt.expected) {
-				t.Errorf("expected %v, actual %v", tt.expected, actual)
-			}
-		})
-	}
+	return ``
 }
