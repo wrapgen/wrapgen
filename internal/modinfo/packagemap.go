@@ -22,12 +22,18 @@ import (
 	"strings"
 )
 
+func (l *Loader) AddToPackageMap(packagePath, packageName string) {
+	l.packageMapLock.Lock()
+	defer l.packageMapLock.Unlock()
+	l.packageMap[packagePath] = packageName
+}
+
 // PackageMap returns a map of import path to package name for specified importPaths.
 // For example packagePath "bla.com/client/v1" is usually named "client".
 func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 	var (
 		pkgMap              = make(map[string]string, len(importPaths))
-		uncachedImportPaths []string
+		uncachedImportPaths = make(map[string]struct{})
 	)
 
 	l.packageMapLock.Lock()
@@ -37,14 +43,17 @@ func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 		if pkgName, hit := l.packageMap[ip]; hit {
 			pkgMap[ip] = pkgName
 		} else {
-			uncachedImportPaths = append(uncachedImportPaths, ip)
+			uncachedImportPaths[ip] = struct{}{}
 		}
 	}
 
 	if len(uncachedImportPaths) > 0 {
 		// invoke go list with -e to gracefully skip packages like syscalls/js.
-		args := []string{"list", "-e", "-find", "-f={{.Name}}:{{.ImportPath}}"}
-		args = append(args, uncachedImportPaths...)
+		args := make([]string, 0, len(uncachedImportPaths)+4)
+		args = append(args, "list", "-e", "-find", "-f={{.Name}}:{{.ImportPath}}")
+		for p := range uncachedImportPaths {
+			args = append(args, p)
+		}
 		cmd := exec.Command("go", args...)
 		cmd.Stderr = os.Stderr
 		cmd.Dir = l.moduleDir
@@ -76,8 +85,8 @@ func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 			return nil, fmt.Errorf(`'go list' failed: %s`, err)
 		}
 
-		for _, ip := range uncachedImportPaths {
-			l.packageMap[ip] = pkgMap[ip]
+		for p := range uncachedImportPaths {
+			l.packageMap[p] = pkgMap[p]
 		}
 	}
 
