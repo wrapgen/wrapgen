@@ -430,15 +430,13 @@ func (ip *Interface) parse(p *parseContext) error {
 					}
 				}
 				if ipTargetInterface == nil {
-					slog.Warn("TODO, embed", "name", v.Name,
-						"position", ip.fileParser.packageParser.position(v.Pos()))
-				} else {
-					err := ipTargetInterface.parse(p)
-					if err != nil {
-						return err
-					}
-					ip.Embedded = append(ip.Embedded, ipTargetInterface)
+					return ip.fileParser.packageParser.errorf(v.Pos(), "can't find embedded interface")
 				}
+				err := ipTargetInterface.parse(p)
+				if err != nil {
+					return err
+				}
+				ip.Embedded = append(ip.Embedded, ipTargetInterface)
 			}
 		case *ast.SelectorExpr: // Embedded interface in another package.
 			importName := v.X.(*ast.Ident).Name
