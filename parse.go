@@ -524,52 +524,6 @@ func (ip *Interface) parse(p *parseContext) error {
 	return nil
 }
 
-//func (p *packageParser) constructInstParams(pkg string, params []*ast.Field, instParams []Type, embeddedInstParams []ast.Expr, tps map[string]Type) ([]Type, error) {
-//	pm := make(map[string]int)
-//	var i int
-//	for _, v := range params {
-//		for _, n := range v.Names {
-//			pm[n.Name] = i
-//			instParams = append(instParams, PredeclaredType(n.Name))
-//			i++
-//		}
-//	}
-//
-//	var runtimeInstParams []Type
-//	for _, instParam := range embeddedInstParams {
-//		switch t := instParam.(type) {
-//		case *ast.Ident:
-//			if idx, ok := pm[t.Name]; ok {
-//				runtimeInstParams = append(runtimeInstParams, instParams[idx])
-//				continue
-//			}
-//		}
-//		modelType, err := p.parseType(pkg, instParam, tps)
-//		if err != nil {
-//			return nil, err
-//		}
-//		runtimeInstParams = append(runtimeInstParams, modelType)
-//	}
-//
-//	return runtimeInstParams, nil
-//}
-//
-//func (p *packageParser) constructTps(it *namedInterface) (tps map[string]model.Type) {
-//	tps = make(map[string]Type)
-//	n := 0
-//	for _, tp := range it.typeParams {
-//		for _, tm := range tp.Names {
-//			tps[tm.Name] = nil
-//			if len(it.instTypes) != 0 {
-//				tps[tm.Name] = it.instTypes[n]
-//				n++
-//			}
-//		}
-//	}
-//	return tps
-//}
-//
-
 func (p *parseContext) parseFunc(fp *fileParser, f *ast.FuncType, tps map[string]Type) (inParam []*Parameter, variadic *Parameter, outParam []*Parameter, err error) {
 	if f.Params != nil {
 		regParams := f.Params.List
