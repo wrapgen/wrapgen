@@ -68,6 +68,7 @@ type packageParser struct {
 	pkg             *ast.Package
 	parsed          bool
 	files           []*fileParser
+	isXtest         bool
 }
 
 type fileParser struct {
@@ -141,6 +142,7 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 		// for the local module, also parse the _test.go files.
 		if strings.HasPrefix(ps.moduleDir, imp.Root) {
 			res = res || slices.Contains(imp.TestGoFiles, info.Name())
+			res = res || slices.Contains(imp.XTestGoFiles, info.Name())
 		}
 		return res
 	}, parser.ParseComments)
@@ -149,8 +151,12 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 	}
 
 	for packageName, p := range pkgs {
-		dirP.modinfoLoader.AddToPackageMap(imp.ImportPath, packageName)
+		isXTestPackage := strings.HasSuffix(packageName, "_test")
+		if !isXTestPackage {
+			dirP.modinfoLoader.AddToPackageMap(imp.ImportPath, packageName)
+		}
 		dirP.pkgs = append(dirP.pkgs, &packageParser{
+			isXtest:         isXTestPackage,
 			directoryParser: dirP,
 			pkg:             p,
 		})

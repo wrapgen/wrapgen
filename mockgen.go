@@ -380,7 +380,6 @@ func (b outputBuffer) ResolvePackageName(packagePath string) (string, error) {
 
 	packageName, found := b.packageMap[packagePath]
 	if !found {
-		slog.Info("package was not resolved. resolving now", "packagePath", packagePath)
 		packageMap, err := b.modinfoLoader.PackageMap([]string{packagePath})
 		if err != nil {
 			return "", err
