@@ -2,7 +2,7 @@
 
 Generates go code based on go interfaces.
 
-It comes with a set of embedded [templates](./templates) but, you can always provide you own templates
+It comes with a set of embedded [templates](./template) but, you can always provide you own templates
 to extend it for other use cases.
 
 Compared to gowrap or mockgen it is significantly faster in generating code, especially in large projects.
