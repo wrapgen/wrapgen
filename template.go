@@ -403,8 +403,6 @@ func templateFunctions(output *outputBuffer) map[string]any {
 			}
 			return l[len(l)-1]
 		},
-		`title`: func(in string) string {
-			return strings.Title(in)
-		},
+		`title`: strings.Title, // nolint:staticcheck
 	}
 }
