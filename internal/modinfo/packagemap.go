@@ -74,7 +74,9 @@ func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 			if len(splitted) != 2 {
 				return nil, fmt.Errorf("unexpected output from 'go list': %v", splitted)
 			}
-			pkgMap[splitted[1]] = splitted[0]
+			if splitted[0] != "" {
+				pkgMap[splitted[1]] = splitted[0]
+			}
 		}
 		if err := s.Err(); err != nil {
 			return nil, fmt.Errorf("reading 'go list' output resulted in error: %s", err)
