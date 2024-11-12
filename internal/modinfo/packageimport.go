@@ -28,10 +28,10 @@ var (
 )
 
 // ImportPath get package import path and module-path via source file.
-func ImportPath(srcDir string) (string, string, error) {
+func ImportPath(srcDir string) (string, string, string, error) {
 	srcDir, err := filepath.Abs(srcDir)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	// trying to find the module
@@ -46,11 +46,11 @@ func ImportPath(srcDir string) (string, string, error) {
 			currentDir = filepath.Dir(currentDir)
 			continue
 		} else if err != nil {
-			return "", "", err
+			return "", "", "", err
 		}
 		modulePath := modfile.ModulePath(dat)
 		packagePath := filepath.ToSlash(filepath.Join(modulePath, strings.TrimPrefix(srcDir, currentDir)))
-		return packagePath, modulePath, nil
+		return packagePath, modulePath, currentDir, nil
 	}
-	return "", "", errOutsideGoPath
+	return "", "", "", errOutsideGoPath
 }

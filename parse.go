@@ -38,24 +38,23 @@ import (
 )
 
 type packageSpec struct {
-	modulePath, packagePath, srcDir string
+	modulePath, packagePath, srcDir, moduleDir string
 }
 
 type parseContext struct {
-	directories    *cache.Cache[packageSpec, *directoryParser]
-	modinfoLoader  map[string]*modinfo.Loader // [module-path>]:*loader
-	dirPackageSpec *cache.Cache[string, packageSpec]
+	directories   *cache.Cache[packageSpec, *directoryParser]
+	modinfoLoader *cache.Cache[string, *modinfo.Loader] // [module-dir]:*loader
 }
 
 func newParseContext() *parseContext {
 	return &parseContext{
-		directories:    cache.New[packageSpec, *directoryParser](),
-		modinfoLoader:  map[string]*modinfo.Loader{},
-		dirPackageSpec: cache.New[string, packageSpec](),
+		directories:   cache.New[packageSpec, *directoryParser](),
+		modinfoLoader: cache.New[string, *modinfo.Loader](),
 	}
 }
 
 type directoryParser struct {
+	ps            packageSpec
 	packagePath   string
 	fileSet       *token.FileSet
 	pkgs          []*packageParser
@@ -113,36 +112,44 @@ func (fp *fileParser) ResolveImportSelectorToPackagePath(name string) string {
 func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 	slog.Info("readPackageInDirectory", "packagePath", ps.packagePath)
 
+	modinfoLoader, _ := p.modinfoLoader.GetOrAdd(ps.moduleDir, func(s string) (*modinfo.Loader, error) {
+		return modinfo.NewLoader(ps.moduleDir), nil
+	})
+
 	dirP := &directoryParser{
+		ps:            ps,
 		packagePath:   ps.packagePath,
 		fileSet:       token.NewFileSet(),
 		pkgs:          make([]*packageParser, 0),
 		srcDir:        ps.srcDir,
-		modinfoLoader: modinfo.NewLoader(ps.srcDir),
+		modinfoLoader: modinfoLoader,
 		modulePath:    ps.modulePath,
 	}
 
-	srcDirAbs, err := filepath.Abs(ps.srcDir)
+	srcDir := ps.srcDir
+	if srcDir != "" {
+		srcDir = filepath.Join(ps.moduleDir, srcDir)
+	}
+	b := build.Default
+	b.Dir = ps.moduleDir
+	imp, err := b.Import(ps.packagePath, srcDir, 0)
 	if err != nil {
 		return nil, err
 	}
-	b := build.Default
-	b.Dir = srcDirAbs
-	var pkgs map[string]*ast.Package
-	if imp, err := b.Import(ps.packagePath, srcDirAbs, 0); err != nil {
-		return nil, err
-	} else if pkgs, err = parser.ParseDir(dirP.fileSet, imp.Dir, func(info fs.FileInfo) bool {
+	pkgs, err := parser.ParseDir(dirP.fileSet, imp.Dir, func(info fs.FileInfo) bool {
 		res := slices.Contains(imp.GoFiles, info.Name())
 		// for the local module, also parse the _test.go files.
-		if strings.HasPrefix(srcDirAbs, imp.Root) {
+		if strings.HasPrefix(ps.moduleDir, imp.Root) {
 			res = res || slices.Contains(imp.TestGoFiles, info.Name())
 		}
 		return res
-	}, parser.ParseComments); err != nil {
+	}, parser.ParseComments)
+	if err != nil {
 		return nil, err
 	}
 
-	for _, p := range pkgs {
+	for packageName, p := range pkgs {
+		dirP.modinfoLoader.AddToPackageMap(imp.ImportPath, packageName)
 		dirP.pkgs = append(dirP.pkgs, &packageParser{
 			directoryParser: dirP,
 			pkg:             p,
@@ -174,7 +181,6 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 		}
 	}
 
-	allImportPaths = append(allImportPaths, dirP.packagePath)
 	_, err = dirP.modinfoLoader.PackageMap(allImportPaths)
 	if err != nil {
 		return nil, err
@@ -201,21 +207,17 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 }
 
 func (p *parseContext) GetPackageSpec(inputFilePath string) (packageSpec, error) {
-	ps, err := p.dirPackageSpec.GetOrAdd(filepath.Dir(inputFilePath), func(dir string) (packageSpec, error) {
-		pp, mp, err := modinfo.ImportPath(dir)
-		if err != nil {
-			return packageSpec{}, err
-		}
-		return packageSpec{
-			modulePath:  mp,
-			packagePath: pp,
-			srcDir:      dir,
-		}, nil
-	})
+	dir := filepath.Dir(inputFilePath)
+	pp, mp, moduleDir, err := modinfo.ImportPath(dir)
 	if err != nil {
 		return packageSpec{}, err
 	}
-	return ps, nil
+	return packageSpec{
+		modulePath:  mp,
+		moduleDir:   moduleDir,
+		packagePath: pp,
+		srcDir:      dir,
+	}, nil
 }
 
 func (p *parseContext) ReadPackageByContainedFile(inputFilePath string) (*directoryParser, error) {
@@ -447,9 +449,10 @@ func (ip *Interface) parse(p *parseContext) error {
 				return pp.errorf(v.Pos(), "could not resolve import path")
 			}
 			dp, err := p.ReadPackage(packageSpec{
-				modulePath:  ip.fileParser.packageParser.directoryParser.modulePath,
+				modulePath:  ip.fileParser.packageParser.directoryParser.ps.modulePath,
+				moduleDir:   ip.fileParser.packageParser.directoryParser.ps.moduleDir,
 				packagePath: packagePath,
-				srcDir:      ip.fileParser.packageParser.directoryParser.srcDir,
+				srcDir:      "",
 			})
 			if err != nil {
 				return err
