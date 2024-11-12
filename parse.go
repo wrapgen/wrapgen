@@ -68,7 +68,6 @@ type packageParser struct {
 	directoryParser *directoryParser
 	pkg             *ast.Package
 	parsed          bool
-	relevant        bool
 	files           []*fileParser
 }
 
