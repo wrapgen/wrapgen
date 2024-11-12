@@ -242,7 +242,7 @@ func (pp *packageParser) errorf(pos token.Pos, format string, args ...any) error
 }
 
 func (pp *packageParser) readInterfaces(p *parseContext) error {
-	if pp.parsed == true {
+	if pp.parsed {
 		return nil
 	}
 	pp.parsed = true
