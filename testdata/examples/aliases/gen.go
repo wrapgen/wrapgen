@@ -2,5 +2,5 @@
 package aliases
 
 //wrapgen:generate -template ./template -destination output.go
-type _ interface {
+type Test interface {
 }

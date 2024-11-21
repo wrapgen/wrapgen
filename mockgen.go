@@ -384,7 +384,12 @@ func (b outputBuffer) ResolvePackageName(packagePath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		packageName = packageMap[packagePath]
+		var ok bool
+		packageName, ok = packageMap[packagePath]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "\tYou may have to execute: go get %v\n", packagePath)
+			return "", fmt.Errorf("Could not resolve %v", packagePath)
+		}
 		b.packageMap[packagePath] = packageName
 	}
 
