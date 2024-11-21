@@ -259,7 +259,7 @@ func processDirectory(basePath string, w fileWriter) {
 					output.buf.WriteRune('\n')
 				}
 
-				templateBasedir := cmd.interfaceParser.fileParser.packageParser.directoryParser.srcDir
+				templateBasedir := cmd.interfaceParser.fileParser.packageParser.directoryParser.ps.srcDir
 				t, err := getTemplate(templateBasedir, cmd.Template)
 				if err != nil {
 					cancel(fmt.Errorf("%s: %s", cmd.Position, err))

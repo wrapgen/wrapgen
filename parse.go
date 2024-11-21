@@ -58,7 +58,6 @@ type directoryParser struct {
 	packagePath   string
 	fileSet       *token.FileSet
 	pkgs          []*packageParser
-	srcDir        string
 	modinfoLoader *modinfo.Loader
 	modulePath    string
 }
@@ -122,7 +121,6 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 		packagePath:   ps.packagePath,
 		fileSet:       token.NewFileSet(),
 		pkgs:          make([]*packageParser, 0),
-		srcDir:        ps.srcDir,
 		modinfoLoader: modinfoLoader,
 		modulePath:    ps.modulePath,
 	}
@@ -136,6 +134,9 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 	imp, err := b.Import(ps.packagePath, srcDir, 0)
 	if err != nil {
 		return nil, err
+	}
+	if dirP.ps.srcDir == "" {
+		dirP.ps.srcDir = imp.Dir
 	}
 	pkgs, err := parser.ParseDir(dirP.fileSet, imp.Dir, func(info fs.FileInfo) bool {
 		res := slices.Contains(imp.GoFiles, info.Name())
@@ -335,7 +336,7 @@ func (pp *packageParser) readInterfaces(p *parseContext) error {
 						// convert slashes to native host format.
 						cmd.Destination = filepath.FromSlash(cmd.Destination)
 						// convert to path relative to source directory of the comment.
-						cmd.Destination = filepath.Join(fp.packageParser.directoryParser.srcDir, cmd.Destination)
+						cmd.Destination = filepath.Join(fp.packageParser.directoryParser.ps.srcDir, cmd.Destination)
 
 						if cmd.PackageName == "" {
 							// this is a simplification. Ideally we should check the packageMap.
