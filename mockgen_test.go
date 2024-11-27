@@ -87,7 +87,8 @@ func TestExamples(t *testing.T) {
 			t.Fatalf("error reading file: %s", err)
 		}
 		if bytes.HasPrefix(data, []byte(noticeGeneratedFile)) {
-			generatedFiles = append(generatedFiles, path)
+			pathAbs, _ := filepath.Abs(path)
+			generatedFiles = append(generatedFiles, pathAbs)
 		}
 
 		return nil
