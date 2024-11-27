@@ -38,7 +38,7 @@ import (
 )
 
 type packageSpec struct {
-	modulePath, packagePath, srcDir, moduleDir string
+	modulePath, packagePath, moduleDir string
 }
 
 type parseContext struct {
@@ -55,6 +55,7 @@ func newParseContext() *parseContext {
 
 type directoryParser struct {
 	ps            packageSpec
+	srcDir        string
 	packagePath   string
 	fileSet       *token.FileSet
 	pkgs          []*packageParser
@@ -125,19 +126,13 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 		modulePath:    ps.modulePath,
 	}
 
-	srcDir := ps.srcDir
-	if srcDir != "" {
-		srcDir = filepath.Join(ps.moduleDir, srcDir)
-	}
 	b := build.Default
 	b.Dir = ps.moduleDir
-	imp, err := b.Import(ps.packagePath, srcDir, 0)
+	imp, err := b.Import(ps.packagePath, "", 0)
 	if err != nil {
 		return nil, err
 	}
-	if dirP.ps.srcDir == "" {
-		dirP.ps.srcDir = imp.Dir
-	}
+	dirP.srcDir = imp.Dir
 	pkgs, err := parser.ParseDir(dirP.fileSet, imp.Dir, func(info fs.FileInfo) bool {
 		res := slices.Contains(imp.GoFiles, info.Name())
 		// for the local module, also parse the _test.go files.
@@ -223,7 +218,6 @@ func (p *parseContext) GetPackageSpec(inputFilePath string) (packageSpec, error)
 		modulePath:  mp,
 		moduleDir:   moduleDir,
 		packagePath: pp,
-		srcDir:      dir,
 	}, nil
 }
 
@@ -336,7 +330,7 @@ func (pp *packageParser) readInterfaces(p *parseContext) error {
 						// convert slashes to native host format.
 						cmd.Destination = filepath.FromSlash(cmd.Destination)
 						// convert to path relative to source directory of the comment.
-						cmd.Destination = filepath.Join(fp.packageParser.directoryParser.ps.srcDir, cmd.Destination)
+						cmd.Destination = filepath.Join(fp.packageParser.directoryParser.srcDir, cmd.Destination)
 
 						if cmd.PackageName == "" {
 							// this is a simplification. Ideally we should check the packageMap.
@@ -459,7 +453,6 @@ func (ip *Interface) parse(p *parseContext) error {
 				modulePath:  ip.fileParser.packageParser.directoryParser.ps.modulePath,
 				moduleDir:   ip.fileParser.packageParser.directoryParser.ps.moduleDir,
 				packagePath: packagePath,
-				srcDir:      "",
 			})
 			if err != nil {
 				return err
