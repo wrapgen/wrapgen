@@ -17,6 +17,7 @@ package modinfo
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -25,33 +26,54 @@ import (
 func (l *Loader) AddToPackageMap(packagePath, packageName string) {
 	l.packageMapLock.Lock()
 	defer l.packageMapLock.Unlock()
-	l.packageMap[packagePath] = packageName
+
+	c := make(chan struct{})
+	close(c)
+	r := &resolvedPackageName{
+		ready:       c,
+		packageName: packageName,
+	}
+	l.packageMap[packagePath] = r
 }
+
+var i = 0
 
 // PackageMap returns a map of import path to package name for specified importPaths.
 // For example packagePath "bla.com/client/v1" is usually named "client".
 func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 	var (
 		pkgMap              = make(map[string]string, len(importPaths))
-		uncachedImportPaths = make(map[string]struct{})
+		uncachedImportPaths = make([]string, 0)
+		resolving           = make([]*resolvedPackageName, 0)
+		waiting             = make(map[string]*resolvedPackageName)
 	)
 
 	l.packageMapLock.Lock()
-	defer l.packageMapLock.Unlock()
-
 	for _, ip := range importPaths {
-		if pkgName, hit := l.packageMap[ip]; hit {
-			pkgMap[ip] = pkgName
+		if resolvePkgName, hit := l.packageMap[ip]; hit {
+			select {
+			case <-resolvePkgName.ready:
+				pkgMap[ip] = resolvePkgName.packageName
+			default:
+				waiting[ip] = resolvePkgName
+			}
 		} else {
-			uncachedImportPaths[ip] = struct{}{}
+			r := &resolvedPackageName{
+				ready: make(chan struct{}),
+			}
+			l.packageMap[ip] = r
+			resolving = append(resolving, r)
+			uncachedImportPaths = append(uncachedImportPaths, ip)
 		}
 	}
+	l.packageMapLock.Unlock()
 
 	if len(uncachedImportPaths) > 0 {
 		// invoke go list with -e to gracefully skip packages like syscalls/js.
+		slog.Info("go list", "args", uncachedImportPaths)
 		args := make([]string, 0, len(uncachedImportPaths)+4)
 		args = append(args, "list", "-e", "-find", "-f={{.Name}}:{{.ImportPath}}")
-		for p := range uncachedImportPaths {
+		for _, p := range uncachedImportPaths {
 			args = append(args, p)
 		}
 		cmd := exec.Command("go", args...)
@@ -86,9 +108,17 @@ func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 			return nil, fmt.Errorf(`'go list' failed: %s`, err)
 		}
 
-		for p := range uncachedImportPaths {
-			l.packageMap[p] = pkgMap[p]
+		for i, r := range resolving {
+			r.packageName = pkgMap[uncachedImportPaths[i]]
+			close(r.ready)
 		}
+	}
+
+	for ip, r := range waiting {
+		select {
+		case <-r.ready:
+		}
+		pkgMap[ip] = r.packageName
 	}
 
 	return pkgMap, nil

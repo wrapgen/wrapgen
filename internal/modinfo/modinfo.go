@@ -18,16 +18,21 @@ import (
 	"sync"
 )
 
+type resolvedPackageName struct {
+	ready       chan struct{}
+	packageName string
+}
+
 type Loader struct {
 	packageMapLock *sync.Mutex
-	packageMap     map[string]string
+	packageMap     map[string]*resolvedPackageName
 	moduleDir      string
 }
 
 func NewLoader(moduleDir string) *Loader {
 	return &Loader{
 		packageMapLock: new(sync.Mutex),
-		packageMap:     map[string]string{},
+		packageMap:     make(map[string]*resolvedPackageName, 200),
 		moduleDir:      moduleDir,
 	}
 }
