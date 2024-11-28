@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"runtime/pprof"
 	"sort"
 	"strings"
 	"sync"
@@ -38,7 +37,6 @@ import (
 
 var (
 	flagShowVersion = flag.Bool("version", false, "Print version.")
-	flagCpuprofile  = flag.String("cpuprofile", "", "Write CPU Profile.")
 	flagVerbose     = flag.Bool("verbose", false, "Verbose logging.")
 )
 
@@ -83,15 +81,8 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &opts)))
 
-	if *flagCpuprofile != "" {
-		f, err := os.Create(*flagCpuprofile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		_ = pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
+	debuginit()
+	defer debugfinish()
 
 	if *flagShowVersion {
 		printVersion()
@@ -233,7 +224,7 @@ func processDirectory(basePath string, w fileWriter) {
 			}()
 
 			output := &outputBuffer{
-				buf:                bytes.Buffer{},
+				buf:                &bytes.Buffer{},
 				packageMap:         make(map[string]string),
 				packageName:        fg.packageName,
 				packagePath:        fg.packagePath,
@@ -273,7 +264,7 @@ func processDirectory(basePath string, w fileWriter) {
 				}
 				t = t.Funcs(templateFunctions(output))
 
-				err = t.Execute(&output.buf, struct {
+				err = t.Execute(output.buf, struct {
 					Interface *Interface
 					Vars      map[string]any
 					Name      string
@@ -356,7 +347,7 @@ func fsWriter(path string) (*os.File, error) {
 }
 
 type outputBuffer struct {
-	buf         bytes.Buffer
+	buf         *bytes.Buffer
 	packageName string
 	packagePath string
 	// imports is a set of referenced packagePaths.

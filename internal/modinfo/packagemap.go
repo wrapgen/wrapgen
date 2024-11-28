@@ -65,7 +65,6 @@ func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 		err = cmd.Start()
 		if err != nil {
 			return nil, fmt.Errorf(`invoking 'go list' failed: %s`, err)
-
 		}
 
 		s := bufio.NewScanner(pipeRead)

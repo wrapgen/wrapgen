@@ -66,9 +66,7 @@ type directoryParser struct {
 type packageParser struct {
 	directoryParser *directoryParser
 	pkg             *ast.Package
-	parsed          bool
 	files           []*fileParser
-	isXtest         bool
 }
 
 type fileParser struct {
@@ -136,7 +134,7 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 	pkgs, err := parser.ParseDir(dirP.fileSet, imp.Dir, func(info fs.FileInfo) bool {
 		res := slices.Contains(imp.GoFiles, info.Name())
 		// for the local module, also parse the _test.go files.
-		if strings.HasPrefix(ps.moduleDir, imp.Root) {
+		if !res && strings.HasPrefix(ps.moduleDir, imp.Root) {
 			res = res || slices.Contains(imp.TestGoFiles, info.Name())
 			res = res || slices.Contains(imp.XTestGoFiles, info.Name())
 		}
@@ -152,7 +150,6 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 			dirP.modinfoLoader.AddToPackageMap(imp.ImportPath, packageName)
 		}
 		dirP.pkgs = append(dirP.pkgs, &packageParser{
-			isXtest:         isXTestPackage,
 			directoryParser: dirP,
 			pkg:             p,
 		})
@@ -165,7 +162,7 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 			fp := &fileParser{
 				packageParser: pp,
 				file:          file,
-				Imports:       make(map[string]string),
+				Imports:       make(map[string]string, len(file.Imports)),
 			}
 			pp.files = append(pp.files, fp)
 
@@ -183,7 +180,8 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 		}
 	}
 
-	_, err = dirP.modinfoLoader.PackageMap(allImportPaths)
+	allImportPaths = append(allImportPaths, dirP.packagePath)
+	fullPackageMap, err := dirP.modinfoLoader.PackageMap(allImportPaths)
 	if err != nil {
 		return nil, err
 	}
@@ -192,11 +190,11 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 		for _, fp := range pp.files {
 			// resolve package-import-paths to package names.
 			// For example packagePath "bla.com/client/v1" is usually named "client".
-			packageMap, err := dirP.modinfoLoader.PackageMap(append(keys(fp.Imports), fp.packageParser.directoryParser.packagePath))
-			if err != nil {
-				return nil, err
+			fp.packageMap = make(map[string]string, len(fp.Imports)+1)
+			fp.packageMap[fp.packageParser.directoryParser.packagePath] = fullPackageMap[fp.packageParser.directoryParser.packagePath]
+			for packagePath := range fp.Imports {
+				fp.packageMap[packagePath] = fullPackageMap[packagePath]
 			}
-			fp.packageMap = packageMap
 		}
 
 		err := pp.readInterfaces(p)
@@ -245,11 +243,6 @@ func (pp *packageParser) errorf(pos token.Pos, format string, args ...any) error
 }
 
 func (pp *packageParser) readInterfaces(p *parseContext) error {
-	if pp.parsed {
-		return nil
-	}
-	pp.parsed = true
-
 	// first run to find all interfaces in all files.
 	for _, fp := range pp.files {
 		for _, decl := range fp.file.Decls {
@@ -752,12 +745,12 @@ func (p *parseContext) parseType(fp *fileParser, typ ast.Expr, tps map[string]Ty
 
 func parseArrayLength(pp *packageParser, expr ast.Expr) (string, error) {
 	switch val := expr.(type) {
-	case (*ast.BasicLit):
+	case *ast.BasicLit:
 		return val.Value, nil
-	case (*ast.Ident):
+	case *ast.Ident:
 		// when the length is a const defined locally
 		return val.Obj.Decl.(*ast.ValueSpec).Values[0].(*ast.BasicLit).Value, nil
-	case (*ast.SelectorExpr):
+	case *ast.SelectorExpr:
 		// when the length is a const defined in an external package
 		usedPkg, err := importer.Default().Import(fmt.Sprintf("%s", val.X))
 		if err != nil {
@@ -768,9 +761,9 @@ func parseArrayLength(pp *packageParser, expr ast.Expr) (string, error) {
 			return "", pp.errorf(expr.Pos(), "unknown constant in array length: %v", err)
 		}
 		return ev.Value.String(), nil
-	case (*ast.ParenExpr):
+	case *ast.ParenExpr:
 		return parseArrayLength(pp, val.X)
-	case (*ast.BinaryExpr):
+	case *ast.BinaryExpr:
 		x, err := parseArrayLength(pp, val.X)
 		if err != nil {
 			return "", err
