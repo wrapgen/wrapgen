@@ -42,6 +42,10 @@ import (
 	"github.com/wrapgen/wrapgen/internal/modinfo"
 )
 
+// wrapgenGenerateKeyword is a magic string that must appear as a comment on an interface
+// to instrument code generation with wrapgen.
+const wrapgenGenerateKeyword = "//wrapgen:generate "
+
 type packageSpec struct {
 	modulePath, packagePath, moduleDir string
 }
@@ -93,7 +97,6 @@ func (p *parseContext) parsePaths() error {
 			if !bytes.Contains(inputFileBody, []byte(wrapgenGenerateKeyword)) {
 				return nil
 			}
-			inputFileBody = nil
 
 			select {
 			case sem <- struct{}{}:
@@ -722,7 +725,7 @@ func (p *parseContext) parseType(fp *fileParser, typ ast.Expr, tps map[string]Ty
 			return PredeclaredType(v.Name), nil
 		}
 		var typeParams []Type
-		typeSpec, ok := v.Obj.Decl.(*ast.TypeSpec)
+		typeSpec, _ := v.Obj.Decl.(*ast.TypeSpec)
 		if typeSpec != nil && typeSpec.TypeParams != nil {
 			var err error
 			params, err := p.parseFieldList(fp, typeSpec.TypeParams.List, tps)

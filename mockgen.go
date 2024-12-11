@@ -39,10 +39,6 @@ var (
 	flagVerbose     = flag.Bool("verbose", false, "Verbose logging.")
 )
 
-// wrapgenGenerateKeyword is a magic string that must appear as a comment on an interface
-// to instrument code generation with wrapgen.
-const wrapgenGenerateKeyword = "//wrapgen:generate "
-
 // tagsFlag is the implementation of the -tags flag.
 // copied from go/internal/work/build.go
 type tagsFlag []string
