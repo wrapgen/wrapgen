@@ -4,7 +4,7 @@ package generics
 import (
 	"time"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/generics/otherPackage"
+	"github.com/wrapgen/wrapgen/testdata/examples/generics/otherPackage"
 
 	"github.com/prometheus/client_golang/prometheus"
 )

@@ -1,4 +1,4 @@
-module github.com/wrapgen/wrapgen/testdata/examples/gomock
+module github.com/wrapgen/wrapgen/testdata/examples
 
 go 1.22
 

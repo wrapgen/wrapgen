@@ -4,7 +4,7 @@ package unexportedMethod_test
 import (
 	"reflect"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/unexportedMethod"
+	"github.com/wrapgen/wrapgen/testdata/examples/unexportedMethod"
 
 	"go.uber.org/mock/gomock"
 )

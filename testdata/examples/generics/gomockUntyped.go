@@ -4,7 +4,7 @@ package generics
 import (
 	"reflect"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/generics/otherPackage"
+	"github.com/wrapgen/wrapgen/testdata/examples/generics/otherPackage"
 
 	"go.uber.org/mock/gomock"
 )
