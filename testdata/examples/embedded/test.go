@@ -1,6 +1,6 @@
 package embedded
 
-import "github.com/wrapgen/wrapgen/testdata/examples/gomock/embedded/otherPkg"
+import "github.com/wrapgen/wrapgen/testdata/examples/embedded/otherPkg"
 
 type LocalIntf interface {
 	Abcdef() float64

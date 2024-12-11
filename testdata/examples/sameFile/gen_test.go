@@ -5,8 +5,8 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/sameFile/apackage"
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/sameFile/bpackage"
+	"github.com/wrapgen/wrapgen/testdata/examples/sameFile/apackage"
+	"github.com/wrapgen/wrapgen/testdata/examples/sameFile/bpackage"
 
 	"go.uber.org/mock/gomock"
 )

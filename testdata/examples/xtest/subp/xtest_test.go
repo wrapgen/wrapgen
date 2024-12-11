@@ -1,6 +1,6 @@
 package subp_test
 
-import "github.com/wrapgen/wrapgen/testdata/examples/gomock/xtest"
+import "github.com/wrapgen/wrapgen/testdata/examples/xtest"
 
 //wrapgen:generate -template gomock -destination xtest_generate_test.go -package subp -name FooTest
 type _ interface {

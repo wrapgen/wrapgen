@@ -4,7 +4,7 @@ package generateOtherPackage_test
 import (
 	"reflect"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/generateOtherPackage"
+	"github.com/wrapgen/wrapgen/testdata/examples/generateOtherPackage"
 
 	"go.uber.org/mock/gomock"
 )

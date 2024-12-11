@@ -4,7 +4,7 @@ package generateOtherPackage_test
 import (
 	"time"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/generateOtherPackage"
+	"github.com/wrapgen/wrapgen/testdata/examples/generateOtherPackage"
 
 	"github.com/prometheus/client_golang/prometheus"
 )

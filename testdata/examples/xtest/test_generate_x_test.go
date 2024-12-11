@@ -4,7 +4,7 @@ package xtest_test
 import (
 	"reflect"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/xtest"
+	"github.com/wrapgen/wrapgen/testdata/examples/xtest"
 
 	"go.uber.org/mock/gomock"
 )

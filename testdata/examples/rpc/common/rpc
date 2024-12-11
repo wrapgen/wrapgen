@@ -1,0 +1,18 @@
+{{- $mockName := printf "%sClient" $.Name }}
+// {{$mockName}} is a toy RPC client for interface {{.Name}}.
+type {{$mockName}} struct {
+    Client *{{ import "net/rpc" }}.Client
+}
+
+{{range $method := $.Interface.AllMethods}}
+func (_c *{{$mockName}}) {{$method.Name}}(ctx {{import "context"}}.Context, arg {{formatType (index $method.In 0).Type}}) ({{formatType (index $method.In 1).Type}}, error) {
+    var reply {{formatType (index $method.In 1).Type.Type}}
+    call := _c.Client.Go("{{$.Name}}.Multiply", arg, &reply, nil)
+    select {
+    case <-ctx.Done():
+        return nil, ctx.Err()
+    case <-call.Done:
+        return &reply, call.Error
+    }
+}
+{{end}}

@@ -4,7 +4,7 @@ package embedded
 import (
 	"time"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/embedded/otherPkg"
+	"github.com/wrapgen/wrapgen/testdata/examples/embedded/otherPkg"
 
 	"github.com/prometheus/client_golang/prometheus"
 )

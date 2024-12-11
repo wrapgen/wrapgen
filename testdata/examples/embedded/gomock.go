@@ -4,7 +4,7 @@ package embedded
 import (
 	"reflect"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/gomock/embedded/otherPkg"
+	"github.com/wrapgen/wrapgen/testdata/examples/embedded/otherPkg"
 
 	"go.uber.org/mock/gomock"
 )

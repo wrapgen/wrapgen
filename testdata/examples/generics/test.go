@@ -1,6 +1,6 @@
 package generics
 
-import "github.com/wrapgen/wrapgen/testdata/examples/gomock/generics/otherPackage"
+import "github.com/wrapgen/wrapgen/testdata/examples/generics/otherPackage"
 
 //wrapgen:generate -template gomock -destination gomock.go -name Test
 //wrapgen:generate -template gomock_untyped -destination gomockUntyped.go -name TestUntyped
