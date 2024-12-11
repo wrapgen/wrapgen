@@ -36,8 +36,6 @@ func (l *Loader) AddToPackageMap(packagePath, packageName string) {
 	l.packageMap[packagePath] = r
 }
 
-var i = 0
-
 // PackageMap returns a map of import path to package name for specified importPaths.
 // For example packagePath "bla.com/client/v1" is usually named "client".
 func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
@@ -73,9 +71,7 @@ func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 		slog.Info("go list", "args", uncachedImportPaths)
 		args := make([]string, 0, len(uncachedImportPaths)+4)
 		args = append(args, "list", "-e", "-find", "-f={{.Name}}:{{.ImportPath}}")
-		for _, p := range uncachedImportPaths {
-			args = append(args, p)
-		}
+		args = append(args, uncachedImportPaths...)
 		cmd := exec.Command("go", args...)
 		cmd.Stderr = os.Stderr
 		cmd.Dir = l.moduleDir
@@ -115,9 +111,7 @@ func (l *Loader) PackageMap(importPaths []string) (map[string]string, error) {
 	}
 
 	for ip, r := range waiting {
-		select {
-		case <-r.ready:
-		}
+		<-r.ready
 		pkgMap[ip] = r.packageName
 	}
 
