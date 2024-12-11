@@ -15,6 +15,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -25,12 +27,15 @@ import (
 	"go/types"
 	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/wrapgen/wrapgen/internal/argparse"
 	"github.com/wrapgen/wrapgen/internal/cache"
@@ -44,13 +49,81 @@ type packageSpec struct {
 type parseContext struct {
 	directories   *cache.Cache[packageSpec, *directoryParser]
 	modinfoLoader *cache.Cache[string, *modinfo.Loader] // [module-dir]:*loader
+	basePaths     []string
 }
 
-func newParseContext() *parseContext {
-	return &parseContext{
+func newParseContext(basePaths []string) (*parseContext, error) {
+	pc := &parseContext{
 		directories:   cache.New[packageSpec, *directoryParser](),
 		modinfoLoader: cache.New[string, *modinfo.Loader](),
 	}
+	for _, bp := range basePaths {
+		p, err := filepath.Abs(bp)
+		if err != nil {
+			return nil, err
+		}
+		pc.basePaths = append(pc.basePaths, p)
+	}
+	return pc, nil
+}
+
+func (p *parseContext) parsePaths() error {
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+	wg := sync.WaitGroup{}
+	ctx, cancel := context.WithCancelCause(context.Background())
+
+	for _, basePath := range p.basePaths {
+		err := filepath.WalkDir(basePath, func(inputFilePath string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return fmt.Errorf("cannot access path %q: %s", inputFilePath, err)
+			}
+			if d.IsDir() {
+				return nil
+			}
+
+			if !strings.HasSuffix(d.Name(), ".go") {
+				return nil
+			}
+
+			inputFileBody, err := os.ReadFile(inputFilePath)
+			if err != nil {
+				return fmt.Errorf("reading input file %v: %s", inputFilePath, err)
+			}
+
+			if !bytes.Contains(inputFileBody, []byte(wrapgenGenerateKeyword)) {
+				return nil
+			}
+			inputFileBody = nil
+
+			select {
+			case sem <- struct{}{}:
+				wg.Add(1)
+				go func() {
+					defer func() {
+						wg.Done()
+						<-sem
+					}()
+					_, err := p.readPackageByContainedFile(inputFilePath)
+					if err != nil {
+						cancel(fmt.Errorf("processing file %v: %s", inputFilePath, err))
+					}
+				}()
+			case <-ctx.Done():
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("walking file tree: %w", err)
+		}
+	}
+
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("processing a file: %w", context.Cause(ctx))
+	}
+
+	return nil
 }
 
 type directoryParser struct {
@@ -61,6 +134,7 @@ type directoryParser struct {
 	pkgs          []*packageParser
 	modinfoLoader *modinfo.Loader
 	modulePath    string
+	isInBasepath  bool
 }
 
 type packageParser struct {
@@ -122,6 +196,7 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 		pkgs:          make([]*packageParser, 0),
 		modinfoLoader: modinfoLoader,
 		modulePath:    ps.modulePath,
+		isInBasepath:  false,
 	}
 
 	b := build.Default
@@ -130,7 +205,15 @@ func (p *parseContext) readPackage(ps packageSpec) (*directoryParser, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	dirP.srcDir = imp.Dir
+	for _, bp := range p.basePaths {
+		if strings.HasPrefix(imp.Dir, bp) {
+			dirP.isInBasepath = true
+			break
+		}
+	}
+
 	pkgs, err := parser.ParseDir(dirP.fileSet, imp.Dir, func(info fs.FileInfo) bool {
 		res := slices.Contains(imp.GoFiles, info.Name())
 		// for the local module, also parse the _test.go files.
@@ -219,7 +302,7 @@ func (p *parseContext) GetPackageSpec(inputFilePath string) (packageSpec, error)
 	}, nil
 }
 
-func (p *parseContext) ReadPackageByContainedFile(inputFilePath string) (*directoryParser, error) {
+func (p *parseContext) readPackageByContainedFile(inputFilePath string) (*directoryParser, error) {
 	ps, err := p.GetPackageSpec(inputFilePath)
 	if err != nil {
 		return nil, err
@@ -280,6 +363,11 @@ func (pp *packageParser) readInterfaces(p *parseContext) error {
 					}
 				}
 
+				fp.Interface = append(fp.Interface, ip)
+				if !fp.packageParser.directoryParser.isInBasepath {
+					continue
+				}
+
 				for _, comment := range comments {
 					if commandLine, found := strings.CutPrefix(comment.Text, wrapgenGenerateKeyword); found {
 						cmd := &interfaceGenerator{
@@ -338,8 +426,6 @@ func (pp *packageParser) readInterfaces(p *parseContext) error {
 						fp.InterfaceGenerators = append(fp.InterfaceGenerators, cmd)
 					}
 				}
-
-				fp.Interface = append(fp.Interface, ip)
 			}
 		}
 	}
@@ -791,14 +877,4 @@ func isVariadic(f *ast.FuncType) bool {
 	}
 	_, ok := f.Params.List[nargs-1].Type.(*ast.Ellipsis)
 	return ok
-}
-
-// keys returns the keys of the map m.
-// The keys will be in an indeterminate order.
-func keys[M ~map[K]V, K comparable, V any](m M) []K {
-	r := make([]K, 0, len(m))
-	for k := range m {
-		r = append(r, k)
-	}
-	return r
 }

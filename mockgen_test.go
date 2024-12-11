@@ -98,7 +98,7 @@ func TestExamples(t *testing.T) {
 	}
 
 	w, m := mapWriter()
-	processDirectory("testdata/examples/", w)
+	processDirectories(w, "testdata/examples/")
 
 	for writtenPath, writtenFileBytes := range m {
 		t.Run(strings.TrimPrefix(writtenPath, "testdata/examples/"), func(t *testing.T) {
@@ -149,4 +149,34 @@ func diff(name, expected, actual string) string {
 	}
 
 	return ``
+}
+
+func TestTwoPackages(t *testing.T) {
+	w, m := mapWriter()
+	processDirectories(w, "testdata/twoPackages/packageA/")
+
+	for writtenPath, writtenFileBytes := range m {
+		t.Run(strings.TrimPrefix(writtenPath, "testdata/examples/"), func(t *testing.T) {
+			expectedBytes, err := os.ReadFile(writtenPath)
+			if err != nil {
+				t.Fatalf("written to unexpected file %v: %s", writtenPath, err)
+			}
+
+			if diff := diff(writtenPath, string(expectedBytes), string(writtenFileBytes)); diff != "" {
+				if *flagOverwrite {
+					_ = os.WriteFile(writtenPath, writtenFileBytes, 0666)
+					t.Fatalf("Overwriting %v", writtenPath)
+				}
+				t.Fatalf("File content differ %s:\n%s", writtenPath, diff)
+			}
+			_ = writtenFileBytes
+		})
+	}
+
+	if len(m) != 1 {
+		for fn := range m {
+			t.Logf("%s", fn)
+		}
+		t.Fatalf("unexpected number of output files")
+	}
 }
