@@ -57,7 +57,7 @@ func getTemplate(templateBasedir string, name string) (*template.Template, error
 			}
 		}
 
-		t.Funcs(templateFunctions(nil))
+		t.Funcs(emptyFuncs)
 		_, err = t.Parse(string(templateText))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse template: %s", err)
@@ -66,6 +66,8 @@ func getTemplate(templateBasedir string, name string) (*template.Template, error
 		return t, nil
 	})
 }
+
+var emptyFuncs = templateFunctions(nil)
 
 func templateFunctions(output *outputBuffer) map[string]any {
 	return map[string]any{

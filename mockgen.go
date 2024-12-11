@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"go/build"
 	"io"
-	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -94,12 +93,9 @@ func main() {
 		args = append(args, ".")
 	}
 
-	for _, dir := range args {
-		processDirectory(dir,
-			func(path string) (stringWriteCloser, error) {
-				return fsWriter(path)
-			})
-	}
+	processDirectories(func(path string) (stringWriteCloser, error) {
+		return fsWriter(path)
+	}, args...)
 }
 
 type stringWriteCloser interface {
@@ -109,61 +105,20 @@ type stringWriteCloser interface {
 
 type fileWriter func(path string) (stringWriteCloser, error)
 
-func processDirectory(basePath string, w fileWriter) {
+func processDirectories(w fileWriter, basePaths ...string) {
 	wg := sync.WaitGroup{}
 	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
 	ctx, cancel := context.WithCancelCause(context.Background())
 
-	pc := newParseContext()
-
-	err := filepath.WalkDir(basePath, func(inputFilePath string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("cannot access path %q: %s", inputFilePath, err)
-		}
-		if d.IsDir() {
-			return nil
-		}
-
-		if !strings.HasSuffix(d.Name(), ".go") {
-			return nil
-		}
-
-		inputFileBody, err := os.ReadFile(inputFilePath)
-		if err != nil {
-			return fmt.Errorf("reading input file %v: %s", inputFilePath, err)
-		}
-
-		if !bytes.Contains(inputFileBody, []byte(wrapgenGenerateKeyword)) {
-			return nil
-		}
-		inputFileBody = nil
-
-		select {
-		case sem <- struct{}{}:
-			wg.Add(1)
-			go func() {
-				defer func() {
-					wg.Done()
-					<-sem
-				}()
-				_, err := pc.ReadPackageByContainedFile(inputFilePath)
-				if err != nil {
-					cancel(fmt.Errorf("processing file %v: %s", inputFilePath, err))
-				}
-			}()
-		case <-ctx.Done():
-			return filepath.SkipAll
-		}
-		return nil
-	})
+	pc, err := newParseContext(basePaths)
 	if err != nil {
-		slog.Error("failed to walk directoryParser tree", "error", err)
+		slog.Error("initializing parseContext", "error", err)
 		os.Exit(1)
 	}
 
-	wg.Wait()
-	if err := ctx.Err(); err != nil {
-		slog.Error("failed to process a file", "error", context.Cause(ctx))
+	err = pc.parsePaths()
+	if err != nil {
+		slog.Error("parse sources", "error", err)
 		os.Exit(1)
 	}
 
