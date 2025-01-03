@@ -47,3 +47,20 @@ func (mock *RepoMock) ResolveIDs(ctx context.Context, queryID string, ids []stri
 	mock.lockResolveIDs.Unlock()
 	return mock.ResolveIDsFunc(ctx, queryID, ids)
 }
+
+// ResolveIDs gets all the calls that were made to ResolveIDs.
+// Check the length with:
+//     len(RepoMock.ResolveIDsCalls())
+func (mock *RepoMock) ResolveIDsCalls() []struct{
+    // Ctx is the ctx argument value.
+    Ctx context.Context
+    // QueryID is the queryID argument value.
+    QueryID string
+    // Ids is the ids argument value.
+    Ids []string
+} {
+    mock.lockResolveIDs.RLock()
+    defer mock.lockResolveIDs.RUnlock()
+    return mock.calls.ResolveIDs
+}
+

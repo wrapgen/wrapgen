@@ -36,3 +36,14 @@ func (mock *TestAMock) Foo() packageB.B {
 	mock.lockFoo.Unlock()
 	return mock.FooFunc()
 }
+
+// Foo gets all the calls that were made to Foo.
+// Check the length with:
+//     len(TestAMock.FooCalls())
+func (mock *TestAMock) FooCalls() []struct{
+} {
+    mock.lockFoo.RLock()
+    defer mock.lockFoo.RUnlock()
+    return mock.calls.Foo
+}
+

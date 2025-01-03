@@ -46,4 +46,18 @@ func (mock *{{$mockName}}) {{$method.Name}}({{parametersIn "arg" $method}}){{ pa
 	mock.{{$method.Name}}Func({{- join ", " (parameterNames "arg" $method.In) -}})
 {{- end}}
 }
+
+// {{$method.Name}} gets all the calls that were made to {{$method.Name}}.
+// Check the length with:
+//     len({{$mockName}}.{{$method.Name}}Calls())
+func (mock *{{$mockName}}) {{$method.Name}}Calls() []struct{
+    {{- range  $method.In }}
+    // {{.Name | title }} is the {{.Name}} argument value.
+    {{.Name | title }} {{formatType .Type}}
+    {{- end}}
+} {
+    mock.lock{{$method.Name}}.RLock()
+    defer mock.lock{{$method.Name}}.RUnlock()
+    return mock.calls.{{$method.Name}}
+}
 {{end}}
