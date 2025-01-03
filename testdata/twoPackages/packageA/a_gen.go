@@ -4,7 +4,7 @@ package packageA
 import (
 	"sync"
 
-	"github.com/wrapgen/wrapgen/testdata/examples/twoPackages/packageB"
+	"github.com/wrapgen/wrapgen/testdata/twoPackages/packageB"
 )
 
 

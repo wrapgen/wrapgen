@@ -1,4 +1,4 @@
-module github.com/wrapgen/wrapgen/testdata/examples/twoPackages
+module github.com/wrapgen/wrapgen/testdata/twoPackages
 
 go 1.22
 
