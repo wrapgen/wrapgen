@@ -1,6 +1,6 @@
 package packageA
 
-import "github.com/wrapgen/wrapgen/testdata/examples/twoPackages/packageB"
+import "github.com/wrapgen/wrapgen/testdata/twoPackages/packageB"
 
 // TestA embeds TestB but must not trigger source generation on TestB.
 //
